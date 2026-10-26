@@ -11,6 +11,13 @@ import { roleKeys } from "@/services/role.queries";
 import type { UpdateUserData, User } from "@/types/user.types";
 import { getUserDepartmentName, isDoctorRoleName } from "@/types/user.types";
 import { AuditInformation } from "@/components/shared/AuditInformation";
+import {
+  INDIAN_MOBILE_LENGTH,
+  INDIAN_PHONE_ERROR,
+  isValidIndianPhoneNumber,
+  normalizeIndianPhoneNumber,
+  sanitizeIndianPhoneInput,
+} from "@/utils/patient.utils";
 
 const formatDateTime = (value?: string | Date | null) => {
   if (!value) return "—";
@@ -60,11 +67,11 @@ export function UserDetailsTab({
   const isActive = user.isActive !== false;
 
   const phoneNumber =
-    typeof anyUser.phoneNumber === "string"
-      ? anyUser.phoneNumber
-      : typeof anyUser.phone === "string"
-        ? anyUser.phone
-        : "—";
+    typeof user.phone === "string" && user.phone.trim()
+      ? user.phone
+      : typeof anyUser.phoneNumber === "string" && anyUser.phoneNumber.trim()
+        ? anyUser.phoneNumber
+        : "";
 
   const username =
     typeof anyUser.username === "string" ? anyUser.username : user.email;
@@ -198,11 +205,30 @@ export function UserDetailsTab({
           <div className="space-y-0">
             <OrganizationInlineField
               label="Phone Number"
-              value={phoneNumber === "—" ? "" : phoneNumber}
-              editable={true}
+              value={phoneNumber}
+              editable={canEdit}
               isSaving={savingField === "phone"}
-              onSave={(value) => onSaveNoopWithToast("Phone Number", value)}
-              displayValue={phoneNumber !== "—" ? phoneNumber : undefined}
+              maxLength={INDIAN_MOBILE_LENGTH}
+              inputMode="numeric"
+              sanitizeDraft={sanitizeIndianPhoneInput}
+              onSave={async (value) => {
+                if (!canEdit) {
+                  toast.info("You don't have permission to edit this user.");
+                  return;
+                }
+                const trimmed = value.trim();
+                if (!trimmed) {
+                  await saveField("phone", { phone: "" });
+                  return;
+                }
+                const phone = normalizeIndianPhoneNumber(trimmed);
+                if (!isValidIndianPhoneNumber(phone)) {
+                  toast.error(INDIAN_PHONE_ERROR);
+                  return;
+                }
+                await saveField("phone", { phone });
+              }}
+              displayValue={phoneNumber || undefined}
             />
             <OrganizationInlineField
               label="Username"
